@@ -55,7 +55,7 @@ const upload = multer({
 // Conexión a MySQL
 const db = mysql.createConnection({
     host: '127.0.0.1',
-    port: 3307,            
+    port: 3306,            
     user: 'root',
     password: '',          
     database: 'visioncare',
@@ -76,6 +76,8 @@ const calcularEdad = (fechaNacimiento) => {
     return edad;
 };
 
+app.use('/api', require('./routes/cvsqRoutes'));
+app.use('/api', require('./routes/distanciaRoutes'));
 // ==========================================
 // ENDPOINTS DE AUTENTICACIÓN (REGISTRO Y LOGIN)
 // ==========================================

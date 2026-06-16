@@ -1,3 +1,4 @@
+console.log("USANDO db.js - puerto 3306");
 const mysql = require('mysql2');
 
 const pool = mysql.createPool({
@@ -5,7 +6,7 @@ const pool = mysql.createPool({
     user: 'root',
     password: '', 
     database: 'visioncare', 
-    port: 3307,
+    port: 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
