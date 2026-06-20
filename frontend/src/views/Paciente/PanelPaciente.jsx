@@ -241,15 +241,34 @@ function PanelPaciente({ usuario, cerrarSesion }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               {noticias.map(noti => (
-                <div key={noti.id_noticia} style={{ background: '#fff', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', borderLeft: `5px solid ${colorBotonPrincipal}` }}>
-                  <h3 style={{ margin: '0 0 10px 0', color: colorTitulos }}>{noti.titulo}</h3>
+                <div key={noti.id_noticia || noti.id} style={{ background: '#fff', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', borderLeft: `5px solid ${colorBotonPrincipal}` }}>
+                  
+                  {/* Título y Nombre del Doctor inyectados con tu diseño */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                    <h3 style={{ margin: '0 0 10px 0', color: colorTitulos }}>{noti.titulo}</h3>
+                    <span style={{ fontSize: '14px', color: '#01579B', fontWeight: 'bold', background: '#E3F2FD', padding: '5px 12px', borderRadius: '6px' }}>
+                      👤 {noti.doctor_nombre || 'Especialista'}
+                    </span>
+                  </div>
+
                   {noti.contenido && <p style={{ fontSize: '16px', whiteSpace: 'pre-wrap' }}>{noti.contenido}</p>}
-                  <span style={{ fontSize: '13px', background: '#F5F5F5', padding: '5px 10px', borderRadius: '4px' }}>📅 {noti.fecha}</span>
-                  {noti.url_archivo && (
+                  
+                  {/* Soporte para la nueva columna url_multimedia de tu backend */}
+                  {(noti.url_multimedia || noti.url_archivo) && (
                     <div style={{ marginTop: '15px' }}>
-                      {noti.tipo_archivo === 'pdf' ? <iframe src={noti.url_archivo} style={{ width: '100%', height: '300px', border: 'none' }} /> : <img src={noti.url_archivo} style={{ maxWidth: '100%', borderRadius: '8px' }} />}
+                      {noti.tipo_multimedia === 'pdf' || noti.tipo_archivo === 'pdf' ? (
+                        <iframe src={noti.url_multimedia || noti.url_archivo} style={{ width: '100%', height: '300px', border: 'none' }} />
+                      ) : (
+                        <img src={noti.url_multimedia || noti.url_archivo} style={{ maxWidth: '100%', borderRadius: '8px' }} />
+                      )}
                     </div>
                   )}
+
+                  <div style={{ marginTop: '15px' }}>
+                    <span style={{ fontSize: '13px', background: '#F5F5F5', padding: '5px 10px', borderRadius: '4px' }}>
+                      📅 {noti.fecha_publicacion ? new Date(noti.fecha_publicacion).toLocaleDateString('es-ES') : noti.fecha}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -282,7 +301,7 @@ function PanelPaciente({ usuario, cerrarSesion }) {
                 <button 
                   onClick={() => { setPasoPrueba('calibracion'); }}
                   disabled={!avisoAceptado}
-                  style={{ background: avisoAceptado ? colorBotonPrincipal : '#ccc', color: '#fff', padding: '15px 30px', fontSize: '18px', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: avisoAceptado ? 'pointer' : 'not-allowed', transition: 'all 0.3s', alignSelf: 'flex-start' }}
+                  style={{ background: avisoAceptado ? colorBotonPrincipal : '#ccc', color: '#fff', padding: '15px 30px', fontSize: '18px', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: avisoAceptado ? 'pointer' : 'not-allowed' }}
                 >
                   Continuar a Calibración
                 </button>

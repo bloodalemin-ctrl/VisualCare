@@ -1,30 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as tf from '@tensorflow/tfjs-core';
-import '@tensorflow/tfjs-backend-webgl';
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
-
-const colorTitulos = '#0277BD'; 
-const colorBotonPrincipal = '#0277BD'; 
-const colorFondoLateral = '#01579B'; 
+import '@tensorflow/tfjs-backend-webgl'; // Importamos WebGL, pero no lo forzamos
+import * as blazeface from '@tensorflow-models/blazeface';
 
 function CalibradorIA({ idUsuario, alTerminar }) {
   const videoRef = useRef(null);
-  const [estadoCamara, setEstadoCamara] = useState('apagada');
+  const [estadoCamara, setEstadoCamara] = useState('apagada'); 
   const [distanciaReal, setDistanciaReal] = useState(0);
   const [estadoDistancia, setEstadoDistancia] = useState('Esperando inicio...');
   const [iaCargada, setIacargada] = useState(false);
   const [alertaActiva, setAlertaActiva] = useState(false);
   
+  // REFERENCIAS CLAVE PARA EVITAR EL "STALE CLOSURE" DE REACT
   const streamAnimacionRef = useRef(null);
   const detectorRef = useRef(null);
+  const calibrandoRef = useRef(false); // <--- Este es el interruptor maestro infalible
 
   const encenderCamara = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setEstadoCamara('encendida');
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play();
+          setEstadoCamara('encendida');
+        };
       }
     } catch (err) {
       alert("No se pudo acceder a la cámara. Verifica los permisos de tu navegador.");
@@ -33,71 +33,88 @@ function CalibradorIA({ idUsuario, alTerminar }) {
 
   const comenzarCalibracion = async () => {
     setEstadoCamara('calibrando');
-    setEstadoDistancia('Cargando IA...');
+    calibrandoRef.current = true; // Encendemos el interruptor maestro
+    setEstadoDistancia('Activando red neuronal...');
     
     try {
-      await tf.ready();
-      try { await tf.setBackend('webgl'); } catch(e) {}
+      // Dejamos que TensorFlow decida el mejor backend (WebGL o CPU) para que no se congele
+      await tf.ready(); 
       
-      const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-      detectorRef.current = await faceLandmarksDetection.createDetector(model, { runtime: 'tfjs' });
+      // Cargamos BlazeFace
+      detectorRef.current = await blazeface.load();
       setIacargada(true);
       
+      // Iniciamos el ciclo de lectura
       detectarRostro();
     } catch (err) {
-      setEstadoDistancia('Error al cargar la IA');
+      setEstadoDistancia('Error al cargar la IA. Reintenta.');
+      console.error("Error inicializando TF:", err);
     }
   };
 
   const detectarRostro = async () => {
-    if (videoRef.current && videoRef.current.readyState === 4 && detectorRef.current && estadoCamara === 'calibrando') {
-      try {
-        const faces = await detectorRef.current.estimateFaces(videoRef.current);
-        let faceWidth = 0;
+    // Si apagamos la calibración o no hay video, detenemos el ciclo
+    if (!calibrandoRef.current || !videoRef.current || !detectorRef.current) return;
 
+    if (videoRef.current.readyState >= 2) {
+      try {
+        // Obtenemos los rostros (el false indica que nos devuelva arreglos numéricos, no tensores pesados)
+        const faces = await detectorRef.current.estimateFaces(videoRef.current, false);
+        
         if (faces && faces.length > 0) {
           const face = faces[0];
-          if (face.keypoints && face.keypoints.length > 0) {
-            const xs = face.keypoints.map(k => k.x);
-            faceWidth = Math.max(...xs) - Math.min(...xs);
-          } else if (face.box) {
-            faceWidth = face.box.width;
+          
+          // BlazeFace nos da las coordenadas [x, y] de la caja del rostro
+          const topLeft = face.topLeft;
+          const bottomRight = face.bottomRight;
+          
+          // Calculamos el ancho de la cara restando las coordenadas X
+          const faceWidth = bottomRight[0] - topLeft[0];
+          
+          if (faceWidth > 0) {
+            // Fórmula calibrada. Si te marca muy lejos, baja este número; si te marca muy cerca, súbelo.
+            let calcCm = Math.round(9200 / faceWidth);
+            
+            if (calcCm > 150) calcCm = 150;
+            if (calcCm < 10) calcCm = 10;
+            
+            setDistanciaReal(calcCm);
+
+            if (calcCm < 40) {
+              setEstadoDistancia('Muy Cerca');
+              setAlertaActiva(true);
+            } else if (calcCm >= 40 && calcCm <= 60) {
+              setEstadoDistancia('Óptimo');
+              setAlertaActiva(false);
+            } else {
+              setEstadoDistancia('Muy Lejos');
+              setAlertaActiva(false);
+            }
           }
         } else {
-          faceWidth = videoRef.current.videoWidth * 0.28; 
+          setEstadoDistancia('Rostro no detectado');
+          setAlertaActiva(false);
         }
-
-        if (faceWidth > 0) {
-          let calcCm = Math.round(9200 / faceWidth);
-          if (calcCm > 150) calcCm = 150;
-          if (calcCm < 10) calcCm = 10;
-          
-          setDistanciaReal(calcCm);
-
-          if (calcCm < 40) {
-            setEstadoDistancia('Muy Cerca');
-            setAlertaActiva(true);
-          } else if (calcCm >= 40 && calcCm <= 60) {
-            setEstadoDistancia('Óptimo');
-            setAlertaActiva(false);
-          } else {
-            setEstadoDistancia('Muy Lejos');
-            setAlertaActiva(false);
-          }
-        }
-      } catch (e) {}
+      } catch (e) {
+        console.error("Fallo leyendo el frame:", e);
+      }
     }
-    if (estadoCamara === 'calibrando') {
+    
+    // Solo pedimos el siguiente frame si el interruptor sigue encendido
+    if (calibrandoRef.current) {
       streamAnimacionRef.current = requestAnimationFrame(detectarRostro);
     }
   };
 
   const detenerCamara = () => {
+    calibrandoRef.current = false; // Apagamos el interruptor maestro inmediatamente
     if (streamAnimacionRef.current) cancelAnimationFrame(streamAnimacionRef.current);
+    
     if (videoRef.current && videoRef.current.srcObject) {
       videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       videoRef.current.srcObject = null;
     }
+    
     setEstadoCamara('apagada');
     setIacargada(false);
     setDistanciaReal(0);
@@ -113,7 +130,7 @@ function CalibradorIA({ idUsuario, alTerminar }) {
     <div style={{ animation: 'fadeIn 0.4s', maxWidth: '1000px', margin: '0 auto', background: '#050A30', padding: '40px', borderRadius: '16px', color: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
         
-        {/* LADO IZQUIERDO: MEDIDOR */}
+        {/* SECCIÓN IZQUIERDA: INDICADORES */}
         <div style={{ flex: '1 1 40%', minWidth: '300px' }}>
           <h1 style={{ fontSize: '32px', fontStyle: 'italic', margin: '0 0 10px 0', textShadow: '0 0 10px rgba(255,255,255,0.3)' }}>CALIBRACIÓN DE<br/>DISTANCIA CON IA</h1>
           <p style={{ fontSize: '16px', color: '#ccc' }}>La IA verificará que te encuentres a la distancia correcta para realizar las pruebas.</p>
@@ -147,7 +164,7 @@ function CalibradorIA({ idUsuario, alTerminar }) {
           </div>
         </div>
 
-        {/* LADO DERECHO: ACCESO A LA CÁMARA */}
+        {/* SECCIÓN DERECHA: CÁMARA */}
         <div style={{ flex: '1 1 45%', minWidth: '320px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h2 style={{ fontSize: '24px', fontStyle: 'italic', marginBottom: '20px', letterSpacing: '1px' }}>ACCESO A LA CÁMARA</h2>
           
@@ -160,7 +177,7 @@ function CalibradorIA({ idUsuario, alTerminar }) {
               <div style={{ position: 'absolute', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 20, background: '#111' }}>
                 <button 
                   onClick={(e) => { e.stopPropagation(); encenderCamara(); }} 
-                  style={{ background: '#fff', color: '#000', border: 'none', padding: '14px 30px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', boxShadow: '0 4px 10px rgba(255,255,255,0.2)' }}
+                  style={{ background: '#fff', color: '#000', border: 'none', padding: '14px 30px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
                 >
                   Activar Cámara
                 </button>
@@ -190,10 +207,17 @@ function CalibradorIA({ idUsuario, alTerminar }) {
               </div>
             )}
 
-            <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} muted playsInline />
+            <video 
+              ref={videoRef} 
+              width="640" 
+              height="480"
+              autoPlay 
+              playsInline 
+              muted 
+              style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} 
+            />
           </div>
 
-          {/* BOTONES ACCION INFERIORES */}
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '30px' }}>
             <button 
               onClick={() => { detenerCamara(); encenderCamara(); }}
@@ -204,7 +228,7 @@ function CalibradorIA({ idUsuario, alTerminar }) {
             <button 
               onClick={() => { alTerminar(distanciaReal); detenerCamara(); }}
               disabled={estadoDistancia !== 'Óptimo'}
-              style={{ background: estadoDistancia === 'Óptimo' ? '#10B981' : '#555', color: '#fff', border: 'none', padding: '12px 30px', borderRadius: '20px', fontWeight: 'bold', cursor: estadoDistancia === 'Óptimo' ? 'pointer' : 'not-allowed', boxShadow: estadoDistancia === 'Óptimo' ? '0 0 10px rgba(16,185,129,0.5)' : 'none' }}
+              style={{ background: estadoDistancia === 'Óptimo' ? '#10B981' : '#555', color: '#fff', border: 'none', padding: '12px 30px', borderRadius: '20px', fontWeight: 'bold', cursor: estadoDistancia === 'Óptimo' ? 'pointer' : 'not-allowed', transition: 'all 0.3s' }}
             >
               CONTINUAR
             </button>

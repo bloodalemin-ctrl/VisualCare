@@ -8,12 +8,12 @@ const fs = require('fs');
 const app = express();
 const PORT = 3000;
 
-// Middleware
+// Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Declaramos uploadDir
+// Configuración y creación estática de la carpeta de subidas
 const uploadDir = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadDir));
 
@@ -22,7 +22,7 @@ if (!fs.existsSync(uploadDir)) {
     console.log('📁 Carpeta uploads creada exitosamente');
 }
 
-// Configuración de multer
+// Configuración de almacenamiento para Multer
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, uploadDir); 
@@ -52,7 +52,7 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 }
 });
 
-// Conexión a MySQL
+// Conexión a tu Base de Datos (WAMP - Puerto 3306)
 const db = mysql.createConnection({
     host: '127.0.0.1',
     port: 3306,            
@@ -63,585 +63,154 @@ const db = mysql.createConnection({
     multipleStatements: true
 });
 
-// Función para calcular edad
-const calcularEdad = (fechaNacimiento) => {
-    if (!fechaNacimiento) return null;
-    const hoy = new Date();
-    const nacimiento = new Date(fechaNacimiento);
-    let edad = hoy.getFullYear() - nacimiento.getFullYear();
-    const mes = hoy.getMonth() - nacimiento.getMonth();
-    if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
-        edad--;
+// Conectar a MySQL
+db.connect((err) => {
+    if (err) {
+        console.error('❌ Error conectando a MySQL WAMP:', err);
+        process.exit(1);
     }
-    return edad;
-};
-
-app.use('/api', require('./routes/cvsqRoutes'));
-app.use('/api', require('./routes/distanciaRoutes'));
-// ==========================================
-// ENDPOINTS DE AUTENTICACIÓN (REGISTRO Y LOGIN)
-// ==========================================
-
-// Registro de usuario
-app.post('/api/registro', (req, res) => {
-    console.log("=".repeat(50));
-    console.log("📥 Datos recibidos en registro:", req.body);
-    console.log("=".repeat(50));
-    
-    const { nombre, apellidoP, apellidoM, correo, password, fechaNacimiento } = req.body;
-    
-    // Validación de campos obligatorios
-    if (!nombre || !apellidoP || !apellidoM || !correo || !password || !fechaNacimiento) {
-        return res.status(400).json({ error: 'Todos los campos son obligatorios (incluyendo fecha de nacimiento)' });
-    }
-
-    // Validación del formato de fecha (YYYY-MM-DD)
-    const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!fechaRegex.test(fechaNacimiento)) {
-        return res.status(400).json({ error: 'Formato de fecha inválido. Use YYYY-MM-DD' });
-    }
-
-    // Validación: que no sea una fecha futura
-    const fechaNac = new Date(fechaNacimiento);
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    fechaNac.setHours(0, 0, 0, 0);
-    
-    if (fechaNac > hoy) {
-        return res.status(400).json({ error: 'La fecha de nacimiento no puede ser futura' });
-    }
-
-    // Validación de correo electrónico
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(correo)) {
-        return res.status(400).json({ error: 'El formato del correo electrónico no es válido' });
-    }
-
-    // Validación de contraseña (mínimo 6 caracteres)
-    if (password.length < 6) {
-        return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
-    }
-
-    const sql = 'INSERT INTO USUARIO (nombre, apellidoP, apellidoM, correo, password, rol, fecha_nacimiento) VALUES (?, ?, ?, ?, ?, "usuario", ?)';
-    
-    db.query(sql, [nombre, apellidoP, apellidoM, correo, password, fechaNacimiento], (err, result) => {
-        if (err) {
-            console.error("❌ Error en registro:", err);
-            if (err.code === 'ER_DUP_ENTRY') {
-                return res.status(400).json({ error: 'El correo ya está registrado.' });
-            }
-            return res.status(500).json({ error: 'Error del servidor al registrar.' });
-        }
-        
-        console.log("✅ Usuario registrado exitosamente:", correo);
-        res.status(201).json({ message: 'Registro exitoso. Por favor inicia sesión.' });
-    });
+    console.log('✅ Base de datos conectada exitosamente a MySQL WAMP (Puerto 3306)');
 });
 
-// Login de usuario
-app.post('/api/login', (req, res) => {
-    console.log("📝 Datos que llegaron desde React:", req.body);
-    
-    const { correo, password } = req.body;
-    
-    if (!correo || !password) {
-        return res.status(400).json({ error: 'Correo y contraseña son obligatorios' });
-    }
+// Carga opcional de tus módulos MVC de Ale
+try {
+    app.use('/api', require('./routes/cvsqRoutes'));
+    app.use('/api', require('./routes/distanciaRoutes'));
+} catch (err) {}
 
-    const sql = 'SELECT id_usuario, nombre, apellidoP, apellidoM, correo, password, rol, cedula, fecha_nacimiento FROM USUARIO WHERE correo = ?';
-    
+// ==========================================
+// ENDPOINTS DE LOGUEO Y AUTENTICACIÓN
+// ==========================================
+app.post('/api/login', (req, res) => {
+    const { correo, password } = req.body;
+    const sql = 'SELECT id_usuario, nombre, apellidoP, correo, password, rol FROM USUARIO WHERE correo = ?';
     db.query(sql, [correo], (err, results) => {
-        if (err) {
-            console.error("❌ Error en login:", err);
-            return res.status(500).json({ error: 'Error del servidor.' });
+        if (err) return res.status(500).json({ error: 'Error del servidor' });
+        if (results.length === 0 || password !== results[0].password) {
+            return res.status(401).json({ error: 'Credenciales incorrectas' });
         }
-        
-        if (results.length === 0) {
-            return res.status(401).json({ error: 'Credenciales incorrectas.' });
-        }
-        
-        const usuario = results[0];
-        
-        if (password !== usuario.password) {
-            return res.status(401).json({ error: 'Credenciales incorrectas.' });
-        }
-        
-        // Calcular edad
-        let edad = null;
-        if (usuario.fecha_nacimiento) {
-            const fechaNac = new Date(usuario.fecha_nacimiento);
-            const hoy = new Date();
-            edad = hoy.getFullYear() - fechaNac.getFullYear();
-            const mes = hoy.getMonth() - fechaNac.getMonth();
-            if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNac.getDate())) {
-                edad--;
-            }
-        }
-        
-        console.log("✅ Login exitoso para usuario:", correo);
-        
+        const user = results[0];
         res.json({
             message: 'Acceso concedido',
-            usuario: { 
-                id: usuario.id_usuario, 
-                nombre: usuario.nombre, 
-                apellidoP: usuario.apellidoP,
-                apellidoM: usuario.apellidoM,
-                correo: usuario.correo,
-                rol: usuario.rol,
-                cedula: usuario.cedula || null,
-                fechaNacimiento: usuario.fecha_nacimiento,
-                edad: edad
-            }
+            usuario: { id: user.id_usuario, nombre: user.nombre, apellidoP: user.apellidoP, correo: user.correo, rol: user.rol }
         });
     });
 });
 
 // ==========================================
-// ENDPOINTS PARA PACIENTES
+// ENDPOINTS DE PACIENTES (MEDICO)
 // ==========================================
 app.get('/api/medico/:idMedico/pacientes', (req, res) => {
-    const { idMedico } = req.params;
-    const query = "SELECT id_usuario as id, nombre, apellidoP, apellidoM, correo, rol, fecha_nacimiento FROM USUARIO WHERE rol IN ('usuario', 'paciente') ORDER BY apellidoP, apellidoM";
-    
+    const query = "SELECT id_usuario, nombre, apellidoP, correo, rol FROM USUARIO WHERE rol = 'usuario' ORDER BY apellidoP";
     db.query(query, (err, results) => {
-        if (err) {
-            console.error("❌ Error buscando pacientes:", err);
-            return res.status(500).json({ error: err.message });
-        }
-        
-        const pacientesConEdad = results.map(paciente => ({
-            id: paciente.id,
-            nombre: paciente.nombre,
-            apellidoP: paciente.apellidoP,
-            apellidoM: paciente.apellidoM,
-            correo: paciente.correo,
-            rol: paciente.rol,
-            edad: calcularEdad(paciente.fecha_nacimiento)
-        }));
-        
-        console.log(`👥 Se enviaron ${pacientesConEdad.length} pacientes a React`);
-        res.json(pacientesConEdad);
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
     });
 });
 
-// ==========================================
-// ENDPOINTS PARA HISTORIAL
-// ==========================================
 app.get('/api/historial/:idPaciente', (req, res) => {
-    const { idPaciente } = req.params;
-    const query = `SELECT * FROM historial_paciente WHERE id_usuario = ? ORDER BY fecha DESC`;
-    
-    db.query(query, [idPaciente], (err, results) => {
+    const query = 'SELECT id_test, tipo, resultado, fecha FROM TEST_VISUAL WHERE id_usuario = ? ORDER BY fecha DESC';
+    db.query(query, [req.params.idPaciente], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        
-        const historialAdaptado = results.map(row => ({
-            id: row.id_historial,
-            tipo: 'Reporte Médico',
-            resultado: row.resultado,
-            url_archivo: row.url_archivo ? `http://localhost:3000${row.url_archivo}` : null,
-            tipo_archivo: row.tipo_archivo,
-            fecha: `Publicado el: ${new Date(row.fecha).toLocaleString('es-ES')}`
+        const adaptados = results.map(r => ({
+            id: r.id_test, tipo: r.tipo, resultado: r.resultado, fecha: new Date(r.fecha).toLocaleString('es-ES')
         }));
-        
-        res.json(historialAdaptado);
+        res.json(adaptados);
     });
 });
 
-app.post('/api/historial/:idPaciente', upload.single('archivo'), (req, res) => {
-    const { idPaciente } = req.params;
-    const { resultado } = req.body;
-    const archivo = req.file;
-
-    let url_archivo = null;
-    let tipo_archivo = null;
-
-    if (archivo) {
-        url_archivo = `/uploads/${archivo.filename}`;
-        const ext = path.extname(archivo.originalname).toLowerCase();
-        tipo_archivo = ext === '.pdf' ? 'pdf' : 'imagen';
-    }
-
-    const query = 'INSERT INTO historial_paciente (id_usuario, resultado, url_archivo, tipo_archivo) VALUES (?, ?, ?, ?)';
-    db.query(query, [idPaciente, resultado || null, url_archivo, tipo_archivo], (err, result) => {
+app.post('/api/historial/:idPaciente', (req, res) => {
+    const query = 'INSERT INTO TEST_VISUAL (id_usuario, tipo, resultado, fecha) VALUES (?, ?, ?, NOW())';
+    db.query(query, [req.params.idPaciente, req.body.tipo || 'Reporte Médico', req.body.resultado], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
-        
-        res.json({
-            id: result.insertId,
-            tipo: 'Reporte Médico',
-            resultado,
-            url_archivo: url_archivo ? `http://localhost:3000${url_archivo}` : null,
-            tipo_archivo,
-            fecha: `Publicado el: ${new Date().toLocaleString('es-ES')}`
-        });
-    });
-});
-
-app.put('/api/historial/:idRegistro', (req, res) => {
-    const { idRegistro } = req.params;
-    const { resultado } = req.body;
-
-    const query = 'UPDATE historial_paciente SET resultado = ? WHERE id_historial = ?';
-    db.query(query, [resultado, idRegistro], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Historial actualizado' });
+        res.json({ id: result.insertId, tipo: req.body.tipo || 'Reporte Médico', resultado: req.body.resultado, fecha: new Date().toLocaleString('es-ES') });
     });
 });
 
 app.delete('/api/historial/:idRegistro', (req, res) => {
-    const { idRegistro } = req.params;
-    
-    db.query('SELECT url_archivo FROM historial_paciente WHERE id_historial = ?', [idRegistro], (err, results) => {
+    db.query('DELETE FROM TEST_VISUAL WHERE id_test = ?', [req.params.idRegistro], (err) => {
         if (err) return res.status(500).json({ error: err.message });
-        
-        if (results.length > 0 && results[0].url_archivo) {
-            const fileName = path.basename(results[0].url_archivo);
-            const filePath = path.join(__dirname, 'uploads', fileName);
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        }
-        
-        db.query('DELETE FROM historial_paciente WHERE id_historial = ?', [idRegistro], (err2) => {
-            if (err2) return res.status(500).json({ error: err2.message });
-            res.json({ message: 'Registro clínico eliminado' });
-        });
+        res.json({ message: 'Registro eliminado' });
     });
 });
 
-// ==========================================
-// ENDPOINTS PARA NOTICIAS (MURO)
-// ==========================================
+// =========================================================================
+// 🔥 CORREGIDO CON LEFT JOIN: ENDPOINTS DE NOTICIAS CON NOMBRE DE DOCTOR
+// =========================================================================
 app.get('/api/noticias', (req, res) => {
-    const formatearNoticias = (filas) => {
-        return filas.map(pub => ({
-            ...pub,
-            url_archivo: (pub.url_archivo && !pub.url_archivo.includes('http')) 
-                ? `http://localhost:3000${pub.url_archivo}` 
-                : pub.url_archivo,
-            fecha: new Date(pub.fecha).toLocaleString('es-ES')
+    const sql = `
+        SELECT n.id_noticia, n.id_autor, n.titulo, n.contenido, n.tipo_multimedia, n.url_multimedia, n.fecha_publicacion,
+               u.nombre AS autor_nombre, u.apellidoP AS autor_apellidoP
+        FROM NOTICIA n
+        LEFT JOIN USUARIO u ON n.id_autor = u.id_usuario
+        ORDER BY n.fecha_publicacion DESC
+    `;
+    
+    db.query(sql, (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const listado = results.map(row => ({
+            id_noticia: row.id_noticia,
+            id_autor: row.id_autor,
+            doctor_nombre: row.autor_nombre ? `Dr. ${row.autor_nombre} ${row.autor_apellidoP || ''}` : 'Especialista',
+            titulo: row.titulo,
+            contenido: row.contenido,
+            tipo_multimedia: row.tipo_multimedia,
+            url_multimedia: row.url_multimedia ? `http://localhost:3000${row.url_multimedia}` : null,
+            fecha_publicacion: row.fecha_publicacion
         }));
-    };
-
-    db.query('SELECT * FROM NOTICIA ORDER BY fecha DESC', (err, results) => {
-        if (err) {
-            db.query('SELECT * FROM NOTICIAS ORDER BY fecha DESC', (err2, results2) => {
-                if (err2) return res.status(500).json({ error: err2.message });
-                res.json(formatearNoticias(results2));
-            });
-        } else {
-            res.json(formatearNoticias(results));
-        }
+        res.json(listado);
     });
 });
 
 app.post('/api/noticias', upload.single('archivo'), (req, res) => {
-    const { titulo, texto } = req.body;
-    const archivo = req.file;
-    
-    let url_archivo = null;
-    let tipo_archivo = null;
-    
-    if (archivo) {
-        url_archivo = `/uploads/${archivo.filename}`;
-        const ext = path.extname(archivo.originalname).toLowerCase();
-        if (ext === '.pdf') tipo_archivo = 'pdf';
-        else if (['.mp4', '.mov', '.avi', '.mkv'].includes(ext)) tipo_archivo = 'video';
-        else tipo_archivo = 'imagen';
+    const { titulo, contenido, id_autor } = req.body;
+    let url_multimedia = null;
+    let tipo_multimedia = 'texto';
+
+    const autorReal = id_autor && id_autor !== 'undefined' ? parseInt(id_autor) : 1;
+
+    if (req.file) {
+        url_multimedia = `/uploads/${req.file.filename}`;
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) tipo_multimedia = 'imagen';
+        if (['.mp4', '.mov', '.avi'].includes(ext)) tipo_multimedia = 'video';
     }
-    
-    db.query('INSERT INTO NOTICIA (titulo, texto, url_archivo, tipo_archivo, fecha) VALUES (?, ?, ?, ?, NOW())', 
-    [titulo || null, texto || null, url_archivo, tipo_archivo], (err, result) => {
-        if (err) {
-            db.query('INSERT INTO NOTICIAS (titulo, texto, url_archivo, tipo_archivo, fecha) VALUES (?, ?, ?, ?, NOW())', 
-            [titulo || null, texto || null, url_archivo, tipo_archivo], (err2, result2) => {
-                if (err2) return res.status(500).json({ error: err2.message });
-                res.json({ 
-                    id: result2.insertId, 
-                    titulo, 
-                    texto, 
-                    url_archivo: url_archivo ? `http://localhost:3000${url_archivo}` : null, 
-                    tipo_archivo, 
-                    fecha: `Publicado el: ${new Date().toLocaleString('es-ES')}`
-                });
-            });
-        } else {
-            res.json({ 
-                id: result.insertId, 
-                titulo, 
-                texto, 
-                url_archivo: url_archivo ? `http://localhost:3000${url_archivo}` : null, 
-                tipo_archivo, 
-                fecha: `Publicado el: ${new Date().toLocaleString('es-ES')}`
-            });
-        }
+
+    const sql = 'INSERT INTO NOTICIA (id_autor, titulo, contenido, tipo_multimedia, url_multimedia, fecha_publicacion) VALUES (?, ?, ?, ?, ?, NOW())';
+    db.query(sql, [autorReal, titulo || 'Sin título', contenido || '', tipo_multimedia, url_multimedia], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({
+            id_noticia: result.insertId,
+            id_autor: autorReal,
+            titulo: titulo || 'Sin título',
+            contenido: contenido || '',
+            tipo_multimedia,
+            url_multimedia: url_multimedia ? `http://localhost:3000${url_multimedia}` : null,
+            fecha_publicacion: new Date().toISOString()
+        });
     });
 });
 
 app.delete('/api/noticias/:id', (req, res) => {
-    const { id } = req.params;
-
-    db.query('SELECT * FROM NOTICIA WHERE id = ?', [id], (err, results) => {
-        if (err || results.length === 0) {
-            db.query('SELECT * FROM NOTICIAS WHERE id_noticia = ?', [id], (err2, results2) => {
-                if (err2 || results2.length === 0) {
-                    return res.status(404).json({ message: 'Publicación no encontrada' });
-                }
-                ejecutarBorrado(results2[0], id, 'NOTICIAS', 'id_noticia');
-            });
-        } else {
-            ejecutarBorrado(results[0], id, 'NOTICIA', 'id');
-        }
+    db.query('DELETE FROM NOTICIA WHERE id_noticia = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Noticia eliminada' });
     });
-
-    function ejecutarBorrado(publicacion, id, tabla, idColumna) {
-        if (publicacion.url_archivo) {
-            const fileName = path.basename(publicacion.url_archivo);
-            const filePath = path.join(__dirname, 'uploads', fileName);
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-                console.log(`🗑️ Archivo eliminado: ${fileName}`);
-            }
-        }
-        
-        db.query(`DELETE FROM ${tabla} WHERE ${idColumna} = ?`, [id], (errDelete) => {
-            if (errDelete) return res.status(500).json({ error: errDelete.message });
-            res.json({ message: 'Publicación eliminada exitosamente' });
-        });
-    }
 });
 
-// ==========================================
-// ENDPOINTS PARA PERFIL MÉDICO
-// ==========================================
-
-// Obtener publicaciones del perfil médico
+// Perfil Médico auxiliar
 app.get('/api/perfil-medico/:idMedico/publicaciones', (req, res) => {
-    const { idMedico } = req.params;
-    
-    const query = `
-        SELECT id_publicacion as id, texto, url_pdf, fecha, created_at
-        FROM perfil_medico_publicaciones 
-        WHERE id_medico = ? 
-        ORDER BY created_at DESC, fecha DESC
-    `;
-    
-    db.query(query, [idMedico], (err, results) => {
+    db.query("SELECT id_test as id, resultado as texto, fecha FROM TEST_VISUAL WHERE id_usuario = ? AND tipo = 'Perfil' ORDER BY fecha DESC", [req.params.idMedico], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        
-        const publicacionesConUrl = results.map(pub => ({
-            id: pub.id,
-            texto: pub.texto,
-            url_pdf: pub.url_pdf ? `http://localhost:3000${pub.url_pdf}` : null,
-            fecha: `Publicado el: ${new Date(pub.created_at || pub.fecha).toLocaleString('es-ES')}`
-        }));
-        
-        res.json(publicacionesConUrl);
+        res.json(results);
     });
 });
 
-// Crear publicación en perfil médico
-app.post('/api/perfil-medico/:idMedico/publicaciones', upload.single('pdf'), (req, res) => {
-    const { idMedico } = req.params;
-    const { texto } = req.body;
-    const pdfFile = req.file;
-    
-    let url_pdf = null;
-    if (pdfFile) {
-        url_pdf = `/uploads/${pdfFile.filename}`;
-    }
-    
-    const query = `INSERT INTO perfil_medico_publicaciones (id_medico, texto, url_pdf, fecha, created_at) VALUES (?, ?, ?, CURDATE(), NOW())`;
-    
-    db.query(query, [idMedico, texto || null, url_pdf], (err, result) => {
+app.post('/api/perfil-medico/:idMedico/publicaciones', (req, res) => {
+    db.query("INSERT INTO TEST_VISUAL (id_usuario, tipo, resultado, fecha) VALUES (?, 'Perfil', ?, NOW())", [req.params.idMedico, req.body.texto], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
-        
-        res.json({
-            id: result.insertId,
-            texto: texto || null,
-            url_pdf: url_pdf ? `http://localhost:3000${url_pdf}` : null,
-            fecha: `Publicado el: ${new Date().toLocaleString('es-ES')}`
-        });
+        res.json({ id: result.insertId, texto: req.body.texto, fecha: new Date() });
     });
 });
 
-// Eliminar publicación del perfil médico
-app.delete('/api/perfil-medico/publicaciones/:idPublicacion', (req, res) => {
-    const { idPublicacion } = req.params;
-    
-    db.query('SELECT url_pdf FROM perfil_medico_publicaciones WHERE id_publicacion = ?', [idPublicacion], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        
-        if (results.length === 0) {
-            return res.status(404).json({ message: 'Publicación no encontrada' });
-        }
-        
-        if (results[0].url_pdf) {
-            const fileName = path.basename(results[0].url_pdf);
-            const filePath = path.join(__dirname, 'uploads', fileName);
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        }
-        
-        db.query('DELETE FROM perfil_medico_publicaciones WHERE id_publicacion = ?', [idPublicacion], (err2) => {
-            if (err2) return res.status(500).json({ error: err2.message });
-            res.json({ message: 'Publicación eliminada exitosamente' });
-        });
-    });
-});
-
-// Obtener datos del perfil médico
-app.get('/api/perfil-medico/:idMedico', (req, res) => {
-    const { idMedico } = req.params;
-    const query = 'SELECT experiencia, url_pdf_perfil FROM USUARIO WHERE id_usuario = ?';
-    
-    db.query(query, [idMedico], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        
-        if (results.length === 0) {
-            return res.json({ experiencia: '', url_pdf_perfil: null });
-        }
-        
-        const data = results[0];
-        if (data.url_pdf_perfil && !data.url_pdf_perfil.includes('http')) {
-            data.url_pdf_perfil = `http://localhost:3000${data.url_pdf_perfil}`;
-        }
-        res.json(data);
-    });
-});
-
-// Actualizar perfil médico
-app.post('/api/perfil-medico/:idMedico', upload.single('pdfPerfil'), (req, res) => {
-    const { idMedico } = req.params;
-    const { experiencia } = req.body;
-    const pdfFile = req.file;
-    
-    let url_pdf_perfil = null;
-    if (pdfFile) {
-        url_pdf_perfil = `/uploads/${pdfFile.filename}`;
-    }
-    
-    const checkQuery = 'SELECT id_usuario FROM USUARIO WHERE id_usuario = ?';
-    db.query(checkQuery, [idMedico], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (results.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
-        
-        let query, params;
-        if (url_pdf_perfil) {
-            query = 'UPDATE USUARIO SET experiencia = ?, url_pdf_perfil = ? WHERE id_usuario = ?';
-            params = [experiencia, url_pdf_perfil, idMedico];
-        } else {
-            query = 'UPDATE USUARIO SET experiencia = ? WHERE id_usuario = ?';
-            params = [experiencia, idMedico];
-        }
-        
-        db.query(query, params, (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ 
-                message: 'Perfil actualizado',
-                url_pdf_perfil: url_pdf_perfil ? `http://localhost:3000${url_pdf_perfil}` : null
-            });
-        });
-    });
-});
-
-// Eliminar PDF del perfil
-app.delete('/api/perfil-medico/:idMedico/pdf', (req, res) => {
-    const { idMedico } = req.params;
-    db.query('SELECT url_pdf_perfil FROM USUARIO WHERE id_usuario = ?', [idMedico], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message }); 
-        if (results.length > 0 && results[0].url_pdf_perfil) {
-            const fileName = path.basename(results[0].url_pdf_perfil);
-            const filePath = path.join(__dirname, 'uploads', fileName);
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-            
-            db.query('UPDATE USUARIO SET url_pdf_perfil = NULL WHERE id_usuario = ?', [idMedico], (err2) => {
-                if (err2) return res.status(500).json({ error: err2.message });
-                res.json({ message: 'Documento eliminado correctamente' });
-            });
-        } else {
-            res.status(404).json({ message: 'No se encontró un documento para eliminar' });
-        }
-    });
-});
-
-// Eliminar experiencia
-app.delete('/api/perfil-medico/:idMedico/experiencia', (req, res) => {
-    const { idMedico } = req.params;
-    db.query('UPDATE USUARIO SET experiencia = NULL WHERE id_usuario = ?', [idMedico], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Trayectoria borrada correctamente' });
-    });
-});
-
-// ==========================================
-// HEALTH CHECK
-// ==========================================
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// ==========================================
-// MANEJO DE ERRORES
-// ==========================================
-app.use((err, req, res, next) => {
-    console.error('❌ Error global:', err);
-    if (err instanceof multer.MulterError) {
-        if (err.code === 'FILE_TOO_LARGE') {
-            return res.status(400).json({ error: 'El archivo es demasiado grande. Máximo 50MB.' });
-        }
-        return res.status(400).json({ error: err.message });
-    }
-    res.status(500).json({ error: err.message || 'Error interno del servidor' });
-});
-
-// ==========================================
-// CONEXIÓN A BD E INICIO
-// ==========================================
-db.connect((err) => {
-    if (err) {
-        console.error('❌ Error conectando a MySQL:', err);
-        process.exit(1);
-    }
-    console.log('✅ Conectado exitosamente a MySQL en el puerto 3307');
-    
-    // Verificar columna fecha_nacimiento
-    db.query(`
-        SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_SCHEMA = 'visioncare' AND TABLE_NAME = 'USUARIO' AND COLUMN_NAME = 'fecha_nacimiento'
-    `, (err, results) => {
-        if (!err && results[0].count === 0) {
-            db.query('ALTER TABLE USUARIO ADD COLUMN fecha_nacimiento DATE AFTER apellidoM', (err) => {
-                if (err) console.error('❌ Error:', err);
-                else console.log('✅ Columna fecha_nacimiento agregada');
-            });
-        } else if (!err) {
-            console.log('✅ Columna fecha_nacimiento ya existe');
-        }
-    });
-    
-    // Crear tabla de publicaciones
-    db.query(`
-        CREATE TABLE IF NOT EXISTS perfil_medico_publicaciones (
-            id_publicacion INT AUTO_INCREMENT PRIMARY KEY,
-            id_medico INT NOT NULL,
-            texto TEXT,
-            url_pdf VARCHAR(500),
-            fecha DATE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (id_medico) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE
-        )
-    `, (err) => {
-        if (err) console.error('❌ Error creando tabla:', err);
-        else console.log('✅ Tabla perfil_medico_publicaciones OK');
-    });
-});
-
-app.listen(PORT, () => {
-    console.log(`\n🚀 Servidor corriendo en http://localhost:${PORT}`);
-    console.log(`✅ Endpoints disponibles:`);
-    console.log(`   POST /api/registro`);
-    console.log(`   POST /api/login`);
-    console.log(`   GET  /api/medico/:idMedico/pacientes`);
-    console.log(`   GET  /api/historial/:idPaciente`);
-    console.log(`   GET  /api/noticias`);
-    console.log(`   GET  /api/perfil-medico/:idMedico/publicaciones`);
-    console.log(`\n✨ Sistema listo!`);
-});
+app.listen(PORT, () => console.log(`🚀 Backend listo en http://localhost:${PORT}`));
