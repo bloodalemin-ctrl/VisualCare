@@ -195,6 +195,16 @@ function CalibradorIA({ idUsuario, alTerminar }) {
               </div>
             )}
 
+            {/* 🔥 BOTÓN PARA APAGAR CÁMARA (RESPETANDO TU DISEÑO) */}
+            {estadoCamara !== 'apagada' && (
+              <button 
+                onClick={detenerCamara} 
+                style={{ position: 'absolute', top: '10px', right: '10px', padding: '8px 15px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', zIndex: 30 }}
+              >
+                Apagar Cámara
+              </button>
+            )}
+
             {estadoCamara === 'calibrando' && !iaCargada && (
               <div style={{ position: 'absolute', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 15 }}>
                 Cargando Red Neuronal Biométrica...
