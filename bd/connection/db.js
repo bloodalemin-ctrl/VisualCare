@@ -1,3 +1,4 @@
+console.log("USANDO db.js - puerto 3306");
 const mysql = require('mysql2');
 
 const pool = mysql.createPool({

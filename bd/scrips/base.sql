@@ -1,19 +1,46 @@
-DROP DATABASE IF EXISTS visioncare;
+drop database visioncare;
 CREATE DATABASE visioncare;
 USE visioncare;
+
+
+-- ale 
+ALTER TABLE USUARIO
+MODIFY COLUMN password VARCHAR(255) NOT NULL;
+ALTER TABLE REPORTE
+MODIFY COLUMN ruta_pdf VARCHAR(255) NOT NULL;
+ALTER TABLE NOTICIA
+MODIFY COLUMN url_multimedia VARCHAR(255) NULL;
+
+ALTER TABLE NOTICIA
+DROP FOREIGN KEY noticia_ibfk_1;
+
+ALTER TABLE NOTICIA
+ADD CONSTRAINT fk_noticia_autor
+FOREIGN KEY (id_autor)
+REFERENCES USUARIO(id_usuario)
+ON DELETE CASCADE;
+
+show tables;
+
+select * FROM  sintomas_cvs;
+TRUNCATE TABLE USUARIO;
+INSERT INTO USUARIO (nombre, apellidoP, apellidoM, correo, password, rol, cedula) 
+VALUES ('Ale', 'Benitez', 'Leonardo', 'admin@visioncare.com', 'admin123', 'admin', NULL);
+
+ALTER TABLE USUARIO ADD COLUMN rol ENUM('admin', 'usuario', 'optometrista') DEFAULT 'usuario';
+ALTER TABLE USUARIO ADD COLUMN cedula VARCHAR(50) NULL;
 
 CREATE TABLE USUARIO (
     id_usuario INT AUTO_INCREMENT NOT NULL,
     nombre VARCHAR(20) NOT NULL,
-    apellidoP VARCHAR(20) NULL,
-    apellidoM VARCHAR(20) NULL,
+    apellidoP VARCHAR (20) NULL,
+    apellidoM VARCHAR (20) NULL,
     correo VARCHAR(30) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL, -- Ampliado para permitir hashes seguros
+    password VARCHAR(20) NOT NULL,
     fecha_registro DATE NOT NULL,
-    rol ENUM('admin', 'usuario', 'optometrista') DEFAULT 'usuario', -- Integrado aquí
-    cedula VARCHAR(50) NULL, -- Integrado aquí
     PRIMARY KEY (id_usuario)
 );
+
 
 CREATE TABLE CALIBRACION (
     id_calibracion INT AUTO_INCREMENT NOT NULL,
@@ -25,6 +52,7 @@ CREATE TABLE CALIBRACION (
     FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE
 );
 
+
 CREATE TABLE DISTANCIA (
     id_distancia INT AUTO_INCREMENT NOT NULL,
     id_usuario INT NOT NULL,
@@ -33,6 +61,7 @@ CREATE TABLE DISTANCIA (
     PRIMARY KEY (id_distancia),
     FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE
 );
+
 
 CREATE TABLE CUESTIONARIO_CVS (
     id_cvs INT AUTO_INCREMENT NOT NULL,
@@ -43,6 +72,7 @@ CREATE TABLE CUESTIONARIO_CVS (
     PRIMARY KEY (id_cvs),
     FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE
 );
+
 
 CREATE TABLE SINTOMAS_CVS (
     id_sintoma INT AUTO_INCREMENT NOT NULL,
@@ -64,12 +94,13 @@ CREATE TABLE TEST_VISUAL (
     FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE
 );
 
+
 CREATE TABLE REPORTE (
     id_reporte INT AUTO_INCREMENT NOT NULL,
     id_usuario INT NOT NULL,
     id_cvs INT NOT NULL,
     id_test INT NOT NULL,
-    ruta_pdf VARCHAR(255) NOT NULL, -- Ampliado para rutas más largas
+    ruta_pdf VARCHAR(50) NOT NULL,
     fecha DATETIME NOT NULL,
     PRIMARY KEY (id_reporte),
     FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE,
@@ -77,16 +108,15 @@ CREATE TABLE REPORTE (
     FOREIGN KEY (id_test) REFERENCES TEST_VISUAL(id_test) ON DELETE CASCADE
 );
 
+
+
 CREATE TABLE NOTICIA (
     id_noticia INT AUTO_INCREMENT PRIMARY KEY,
     id_autor INT,
     titulo VARCHAR(60) NOT NULL,
     contenido TEXT,
     tipo_multimedia ENUM('texto', 'imagen', 'video') DEFAULT 'texto',
-    url_multimedia VARCHAR(255) NULL, -- Ampliado para URLs largas
+    url_multimedia VARCHAR(80) NULL,
     fecha_publicacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_autor) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE -- Agregado ON DELETE CASCADE para consistencia
+    FOREIGN KEY (id_autor) REFERENCES USUARIO(id_usuario)
 );
-
--- Las consultas de prueba van hasta el final, una vez que todo existe
-SHOW TABLES;
