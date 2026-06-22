@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import Login from './components/Login';
-// importacion a las carpetas correspondientes
-// aqui hay que poner los modulos de cada usuario 
+
+// Importaciones de los otros usuarios
 import PanelPaciente from './views/Paciente/PanelPaciente';
 import PanelMedico from './views/Optometrista/PanelMedico';
-import PanelAdmin from './views/Admin/PanelAdmin';
+
+// 👇 1. Modificamos la ruta para que apunte al archivo que creamos
+import PanelAdmin from './pages/Admin/AdminDashboard'; 
 
 function App() {
-  const [usuarioLogeado, setUsuarioLogeado] = useState(null);
+  // 👇 2. TRUCO PARA DISEÑAR: Cambiamos 'null' por un usuario admin temporal. 
+  // Cuando termines de diseñar, solo borras este objeto y vuelves a poner 'null'.
+  const [usuarioLogeado, setUsuarioLogeado] = useState({ rol: 'admin', nombre: 'Xiadani' });
 
   if (!usuarioLogeado) {
     return <Login alLogearse={(datos) => setUsuarioLogeado(datos)} />;
@@ -21,7 +25,8 @@ function App() {
   if (usuarioLogeado.rol === 'optometrista') {
     return <PanelMedico usuario={usuarioLogeado} cerrarSesion={() => setUsuarioLogeado(null)} />;
   }
-// si no es admin o opto por defecto sera usuario 
+
+  // Si no es admin u opto, por defecto será usuario
   return <PanelPaciente usuario={usuarioLogeado} cerrarSesion={() => setUsuarioLogeado(null)} />;
 }
 

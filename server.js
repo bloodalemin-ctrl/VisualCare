@@ -55,7 +55,7 @@ const upload = multer({
 // Conexión a MySQL
 const db = mysql.createConnection({
     host: '127.0.0.1',
-    port: 3307,            
+    port: 3306,            
     user: 'root',
     password: '',          
     database: 'visioncare',
@@ -574,6 +574,86 @@ app.delete('/api/perfil-medico/:idMedico/experiencia', (req, res) => {
 // ==========================================
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// ==========================================
+// ENDPOINTS PARA ADMIN - GESTIÓN DE MÉDICOS
+// ==========================================
+
+// 1. OBTENER todos los médicos (READ)
+app.get('/api/admin/medicos', (req, res) => {
+    // Buscamos solo a los usuarios que tengan el rol de optometrista
+    const sql = 'SELECT id_usuario as id, nombre, apellidoP, apellidoM, correo, cedula, fecha_nacimiento FROM USUARIO WHERE rol = "optometrista"';
+    
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.error("❌ Error obteniendo médicos:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
+    });
+});
+
+// 2. CREAR un nuevo médico (CREATE)
+app.post('/api/admin/medicos', (req, res) => {
+    const { nombre, apellidoP, apellidoM, correo, password, cedula, fechaNacimiento } = req.body;
+    
+    // Lo insertamos forzando que el rol sea "optometrista"
+    const sql = 'INSERT INTO USUARIO (nombre, apellidoP, apellidoM, correo, password, rol, cedula, fecha_nacimiento) VALUES (?, ?, ?, ?, ?, "optometrista", ?, ?)';
+    
+    db.query(sql, [nombre, apellidoP, apellidoM, correo, password, cedula, fechaNacimiento], (err, result) => {
+        if (err) {
+            console.error("❌ Error creando médico:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json({ message: 'Médico creado exitosamente', id: result.insertId });
+    });
+});
+
+// 3. ELIMINAR un médico (DELETE)
+app.delete('/api/admin/medicos/:id', (req, res) => {
+    const { id } = req.params;
+    
+    // Por seguridad, confirmamos que sea un optometrista antes de borrar
+    const sql = 'DELETE FROM USUARIO WHERE id_usuario = ? AND rol = "optometrista"';
+    
+    db.query(sql, [id], (err, result) => {
+        if (err) {
+            console.error("❌ Error eliminando médico:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json({ message: 'Médico eliminado correctamente' });
+    });
+});
+
+// 4. ACTUALIZAR un médico (UPDATE)
+app.put('/api/admin/medicos/:id', (req, res) => {
+    const { id } = req.params;
+    const { nombre, apellidoP, apellidoM, correo, cedula, fechaNacimiento } = req.body;
+    
+    // Actualizamos los datos (dejamos la contraseña intacta por seguridad)
+    const sql = 'UPDATE USUARIO SET nombre = ?, apellidoP = ?, apellidoM = ?, correo = ?, cedula = ?, fecha_nacimiento = ? WHERE id_usuario = ? AND rol = "optometrista"';
+    
+    db.query(sql, [nombre, apellidoP, apellidoM, correo, cedula, fechaNacimiento, id], (err, result) => {
+        if (err) {
+            console.error("❌ Error actualizando médico:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json({ message: 'Médico actualizado correctamente' });
+    });
+});
+
+// 5. OBTENER todos los pacientes (READ para Admin)
+app.get('/api/admin/pacientes', (req, res) => {
+    const sql = 'SELECT id_usuario as id, nombre, apellidoP, apellidoM, correo, fecha_nacimiento FROM USUARIO WHERE rol = "usuario" OR rol = "paciente"';
+    
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.error("❌ Error obteniendo pacientes:", err);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
+    });
 });
 
 // ==========================================
