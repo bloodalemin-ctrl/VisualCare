@@ -79,6 +79,29 @@ try {
 } catch (err) {}
 
 // ==========================================
+// ENDPOINT DE REGISTRO DE NUEVOS USUARIOS
+// ==========================================
+app.post('/api/registro', (req, res) => {
+    const { nombre, apellidoP, apellidoM, correo, password, fechaNacimiento } = req.body;
+    
+    // Por defecto, cualquiera que se registre desde la pantalla principal es 'paciente'
+    const rol = 'paciente'; 
+    
+    const sql = 'INSERT INTO USUARIO (nombre, apellidoP, apellidoM, correo, password, rol, fecha_nacimiento) VALUES (?, ?, ?, ?, ?, ?, ?)';
+    
+    db.query(sql, [nombre, apellidoP, apellidoM, correo, password, rol, fechaNacimiento], (err, result) => {
+        if (err) {
+            console.error("❌ Error en registro:", err);
+            if (err.code === 'ER_DUP_ENTRY') {
+                 return res.status(400).json({ error: 'El correo ya está registrado en el sistema' });
+            }
+            return res.status(500).json({ error: 'Error interno del servidor al crear la cuenta' });
+        }
+        res.json({ message: 'Cuenta creada exitosamente', id: result.insertId });
+    });
+});
+
+// ==========================================
 // ENDPOINTS DE LOGUEO Y AUTENTICACIÓN
 // ==========================================
 app.post('/api/login', (req, res) => {
