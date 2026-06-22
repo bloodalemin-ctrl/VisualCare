@@ -101,7 +101,7 @@ app.post('/api/login', (req, res) => {
 // ENDPOINTS DE PACIENTES (MEDICO)
 // ==========================================
 app.get('/api/medico/:idMedico/pacientes', (req, res) => {
-    const query = "SELECT id_usuario, nombre, apellidoP, correo, rol FROM USUARIO WHERE rol = 'usuario' ORDER BY apellidoP";
+    const query = "SELECT id_usuario, nombre, apellidoP, correo, rol FROM USUARIO WHERE rol IN ('usuario', 'paciente') ORDER BY apellidoP";
     db.query(query, (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
@@ -346,19 +346,22 @@ app.get('/api/admin/medicos', (req, res) => {
     });
 });
 
-// 2. CREAR un nuevo médico (CREATE)
+// 2. CREAR un nuevo usuario con ROL (CREATE)
 app.post('/api/admin/medicos', (req, res) => {
-    const { nombre, apellidoP, apellidoM, correo, password, cedula, fechaNacimiento } = req.body;
+    // Agregamos 'rol' a los datos que recibimos
+    const { nombre, apellidoP, apellidoM, correo, password, cedula, fechaNacimiento, rol } = req.body;
     
-    // Lo insertamos forzando que el rol sea "optometrista"
-    const sql = 'INSERT INTO USUARIO (nombre, apellidoP, apellidoM, correo, password, rol, cedula, fecha_nacimiento) VALUES (?, ?, ?, ?, ?, "optometrista", ?, ?)';
+    // Si por alguna razón no envían rol, lo protegemos poniéndole 'paciente' por defecto
+    const rolAsignado = rol || 'paciente';
     
-    db.query(sql, [nombre, apellidoP, apellidoM, correo, password, cedula, fechaNacimiento], (err, result) => {
+    const sql = 'INSERT INTO USUARIO (nombre, apellidoP, apellidoM, correo, password, rol, cedula, fecha_nacimiento) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+    
+    db.query(sql, [nombre, apellidoP, apellidoM, correo, password, rolAsignado, cedula, fechaNacimiento], (err, result) => {
         if (err) {
-            console.error("❌ Error creando médico:", err);
+            console.error("❌ Error creando usuario:", err);
             return res.status(500).json({ error: err.message });
         }
-        res.json({ message: 'Médico creado exitosamente', id: result.insertId });
+        res.json({ message: 'Usuario creado exitosamente', id: result.insertId });
     });
 });
 
@@ -378,20 +381,21 @@ app.delete('/api/admin/medicos/:id', (req, res) => {
     });
 });
 
-// 4. ACTUALIZAR un médico (UPDATE)
+// 4. ACTUALIZAR un usuario con ROL (UPDATE)
 app.put('/api/admin/medicos/:id', (req, res) => {
     const { id } = req.params;
-    const { nombre, apellidoP, apellidoM, correo, cedula, fechaNacimiento } = req.body;
+    // Agregamos 'rol'
+    const { nombre, apellidoP, apellidoM, correo, cedula, fechaNacimiento, rol } = req.body;
     
-    // Actualizamos los datos (dejamos la contraseña intacta por seguridad)
-    const sql = 'UPDATE USUARIO SET nombre = ?, apellidoP = ?, apellidoM = ?, correo = ?, cedula = ?, fecha_nacimiento = ? WHERE id_usuario = ? AND rol = "optometrista"';
+    // Actualizamos la base de datos y le quitamos la restricción de que solo edite optometristas
+    const sql = 'UPDATE USUARIO SET nombre = ?, apellidoP = ?, apellidoM = ?, correo = ?, cedula = ?, fecha_nacimiento = ?, rol = ? WHERE id_usuario = ?';
     
-    db.query(sql, [nombre, apellidoP, apellidoM, correo, cedula, fechaNacimiento, id], (err, result) => {
+    db.query(sql, [nombre, apellidoP, apellidoM, correo, cedula, fechaNacimiento, rol, id], (err, result) => {
         if (err) {
-            console.error("❌ Error actualizando médico:", err);
+            console.error("❌ Error actualizando usuario:", err);
             return res.status(500).json({ error: err.message });
         }
-        res.json({ message: 'Médico actualizado correctamente' });
+        res.json({ message: 'Usuario actualizado correctamente' });
     });
 });
 
@@ -405,6 +409,37 @@ app.get('/api/admin/pacientes', (req, res) => {
             return res.status(500).json({ error: err.message });
         }
         res.json(results);
+    });
+});
+
+// 6. OBTENER Historial Completo de un Paciente (Test + Reportes)
+app.get('/api/admin/pacientes/:id/historial', (req, res) => {
+    const { id } = req.params;
+
+    // Consulta 1: Obtener los test visuales
+    const sqlTests = 'SELECT * FROM test_visual WHERE id_usuario = ? ORDER BY id_test DESC';
+    
+    // Consulta 2: Obtener los reportes
+    const sqlReportes = 'SELECT * FROM reporte WHERE id_usuario = ? ORDER BY id_reporte DESC';
+
+    db.query(sqlTests, [id], (err, tests) => {
+        if (err) {
+            console.error("❌ Error obteniendo tests visuales:", err);
+            return res.status(500).json({ error: err.message });
+        }
+
+        db.query(sqlReportes, [id], (err2, reportes) => {
+            if (err2) {
+                console.error("❌ Error obteniendo reportes:", err2);
+                return res.status(500).json({ error: err2.message });
+            }
+
+            // Respondemos con ambos paquetes de datos juntos
+            res.json({
+                tests: tests,
+                reportes: reportes
+            });
+        });
     });
 });
 

@@ -5,13 +5,13 @@ import Login from './components/Login';
 import PanelPaciente from './views/Paciente/PanelPaciente';
 import PanelMedico from './views/Optometrista/PanelMedico';
 
-// 👇 1. Modificamos la ruta para que apunte al archivo que creamos
+// Importación de tu panel de administrador
 import PanelAdmin from './pages/Admin/AdminDashboard'; 
 
 function App() {
-  // 👇 2. TRUCO PARA DISEÑAR: Cambiamos 'null' por un usuario admin temporal. 
-  // Cuando termines de diseñar, solo borras este objeto y vuelves a poner 'null'.
-  const [usuarioLogeado, setUsuarioLogeado] = useState({ rol: 'admin', nombre: 'Xiadani' });
+  // Se quitó el truco temporal. Ahora el sistema arranca sin nadie logeado (null)
+  // para forzar a que pasen por la pantalla de Login real.
+  const [usuarioLogeado, setUsuarioLogeado] = useState(null);
 
   if (!usuarioLogeado) {
     return <Login alLogearse={(datos) => setUsuarioLogeado(datos)} />;
@@ -26,7 +26,7 @@ function App() {
     return <PanelMedico usuario={usuarioLogeado} cerrarSesion={() => setUsuarioLogeado(null)} />;
   }
 
-  // Si no es admin u opto, por defecto será usuario
+  // Si no es admin u opto, por defecto será usuario (paciente)
   return <PanelPaciente usuario={usuarioLogeado} cerrarSesion={() => setUsuarioLogeado(null)} />;
 }
 
