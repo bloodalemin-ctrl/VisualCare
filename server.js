@@ -135,12 +135,12 @@ app.delete('/api/historial/:idRegistro', (req, res) => {
 });
 
 // =========================================================================
-// 🔥 CORREGIDO CON LEFT JOIN: ENDPOINTS DE NOTICIAS CON NOMBRE DE DOCTOR
+// 🔥 ENDPOINTS DE NOTICIAS CON VALIDACIÓN DE ROL (DR. vs ADMIN)
 // =========================================================================
 app.get('/api/noticias', (req, res) => {
     const sql = `
         SELECT n.id_noticia, n.id_autor, n.titulo, n.contenido, n.tipo_multimedia, n.url_multimedia, n.fecha_publicacion,
-               u.nombre AS autor_nombre, u.apellidoP AS autor_apellidoP
+               u.nombre AS autor_nombre, u.apellidoP AS autor_apellidoP, u.rol AS autor_rol
         FROM NOTICIA n
         LEFT JOIN USUARIO u ON n.id_autor = u.id_usuario
         ORDER BY n.fecha_publicacion DESC
@@ -148,16 +148,24 @@ app.get('/api/noticias', (req, res) => {
     
     db.query(sql, (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        const listado = results.map(row => ({
-            id_noticia: row.id_noticia,
-            id_autor: row.id_autor,
-            doctor_nombre: row.autor_nombre ? `Dr. ${row.autor_nombre} ${row.autor_apellidoP || ''}` : 'Especialista',
-            titulo: row.titulo,
-            contenido: row.contenido,
-            tipo_multimedia: row.tipo_multimedia,
-            url_multimedia: row.url_multimedia ? `http://localhost:3000${row.url_multimedia}` : null,
-            fecha_publicacion: row.fecha_publicacion
-        }));
+        
+        const listado = results.map(row => {
+            let prefijo = 'Especialista';
+            if (row.autor_nombre) {
+                prefijo = row.autor_rol === 'admin' ? 'Admin.' : 'Dr.';
+            }
+
+            return {
+                id_noticia: row.id_noticia,
+                id_autor: row.id_autor,
+                doctor_nombre: row.autor_nombre ? `${prefijo} ${row.autor_nombre} ${row.autor_apellidoP || ''}` : 'Especialista',
+                titulo: row.titulo,
+                contenido: row.contenido,
+                tipo_multimedia: row.tipo_multimedia,
+                url_multimedia: row.url_multimedia ? `http://localhost:3000${row.url_multimedia}` : null,
+                fecha_publicacion: row.fecha_publicacion
+            };
+        });
         res.json(listado);
     });
 });
@@ -174,6 +182,7 @@ app.post('/api/noticias', upload.single('archivo'), (req, res) => {
         const ext = path.extname(req.file.originalname).toLowerCase();
         if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) tipo_multimedia = 'imagen';
         if (['.mp4', '.mov', '.avi'].includes(ext)) tipo_multimedia = 'video';
+        if (ext === '.pdf') tipo_multimedia = 'pdf';
     }
 
     const sql = 'INSERT INTO NOTICIA (id_autor, titulo, contenido, tipo_multimedia, url_multimedia, fecha_publicacion) VALUES (?, ?, ?, ?, ?, NOW())';
@@ -188,6 +197,35 @@ app.post('/api/noticias', upload.single('archivo'), (req, res) => {
             url_multimedia: url_multimedia ? `http://localhost:3000${url_multimedia}` : null,
             fecha_publicacion: new Date().toISOString()
         });
+    });
+});
+
+app.put('/api/noticias/:id', upload.single('archivo'), (req, res) => {
+    const { id } = req.params;
+    const { titulo, contenido } = req.body;
+    
+    let sql = 'UPDATE NOTICIA SET titulo = ?, contenido = ?';
+    let params = [titulo, contenido];
+
+    if (req.file) {
+        let tipo_multimedia = 'texto';
+        const url_multimedia = `/uploads/${req.file.filename}`;
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        
+        if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) tipo_multimedia = 'imagen';
+        if (['.mp4', '.mov', '.avi'].includes(ext)) tipo_multimedia = 'video';
+        if (ext === '.pdf') tipo_multimedia = 'pdf';
+
+        sql += ', url_multimedia = ?, tipo_multimedia = ?';
+        params.push(url_multimedia, tipo_multimedia);
+    }
+    
+    sql += ' WHERE id_noticia = ?';
+    params.push(id);
+
+    db.query(sql, params, (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Noticia actualizada correctamente' });
     });
 });
 
@@ -329,17 +367,17 @@ app.get('/api/health', (req, res) => {
 });
 
 // ==========================================
-// ENDPOINTS PARA ADMIN - GESTIÓN DE MÉDICOS
+// ENDPOINTS PARA ADMIN - GESTIÓN DE USUARIOS
 // ==========================================
 
-// 1. OBTENER todos los médicos (READ)
+// 1. OBTENER TODOS los usuarios (READ) - MODIFICADO PARA INCLUIR EL ROL
 app.get('/api/admin/medicos', (req, res) => {
-    // Buscamos solo a los usuarios que tengan el rol de optometrista
-    const sql = 'SELECT id_usuario as id, nombre, apellidoP, apellidoM, correo, cedula, fecha_nacimiento FROM USUARIO WHERE rol = "optometrista"';
+    // Ya no filtramos por optometrista, traemos a todos con su rol
+    const sql = 'SELECT id_usuario as id, nombre, apellidoP, apellidoM, correo, cedula, fecha_nacimiento, rol FROM USUARIO';
     
     db.query(sql, (err, results) => {
         if (err) {
-            console.error("❌ Error obteniendo médicos:", err);
+            console.error("❌ Error obteniendo usuarios:", err);
             return res.status(500).json({ error: err.message });
         }
         res.json(results);
@@ -348,12 +386,8 @@ app.get('/api/admin/medicos', (req, res) => {
 
 // 2. CREAR un nuevo usuario con ROL (CREATE)
 app.post('/api/admin/medicos', (req, res) => {
-    // Agregamos 'rol' a los datos que recibimos
     const { nombre, apellidoP, apellidoM, correo, password, cedula, fechaNacimiento, rol } = req.body;
-    
-    // Si por alguna razón no envían rol, lo protegemos poniéndole 'paciente' por defecto
     const rolAsignado = rol || 'paciente';
-    
     const sql = 'INSERT INTO USUARIO (nombre, apellidoP, apellidoM, correo, password, rol, cedula, fecha_nacimiento) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
     
     db.query(sql, [nombre, apellidoP, apellidoM, correo, password, rolAsignado, cedula, fechaNacimiento], (err, result) => {
@@ -365,29 +399,26 @@ app.post('/api/admin/medicos', (req, res) => {
     });
 });
 
-// 3. ELIMINAR un médico (DELETE)
+// 3. ELIMINAR un usuario (DELETE)
 app.delete('/api/admin/medicos/:id', (req, res) => {
     const { id } = req.params;
-    
-    // Por seguridad, confirmamos que sea un optometrista antes de borrar
-    const sql = 'DELETE FROM USUARIO WHERE id_usuario = ? AND rol = "optometrista"';
+    // Quitamos la restricción de que solo borre optometristas para que el Admin pueda borrar a cualquiera
+    const sql = 'DELETE FROM USUARIO WHERE id_usuario = ?';
     
     db.query(sql, [id], (err, result) => {
         if (err) {
-            console.error("❌ Error eliminando médico:", err);
+            console.error("❌ Error eliminando usuario:", err);
             return res.status(500).json({ error: err.message });
         }
-        res.json({ message: 'Médico eliminado correctamente' });
+        res.json({ message: 'Usuario eliminado correctamente' });
     });
 });
 
 // 4. ACTUALIZAR un usuario con ROL (UPDATE)
 app.put('/api/admin/medicos/:id', (req, res) => {
     const { id } = req.params;
-    // Agregamos 'rol'
     const { nombre, apellidoP, apellidoM, correo, cedula, fechaNacimiento, rol } = req.body;
     
-    // Actualizamos la base de datos y le quitamos la restricción de que solo edite optometristas
     const sql = 'UPDATE USUARIO SET nombre = ?, apellidoP = ?, apellidoM = ?, correo = ?, cedula = ?, fecha_nacimiento = ?, rol = ? WHERE id_usuario = ?';
     
     db.query(sql, [nombre, apellidoP, apellidoM, correo, cedula, fechaNacimiento, rol, id], (err, result) => {
@@ -416,10 +447,7 @@ app.get('/api/admin/pacientes', (req, res) => {
 app.get('/api/admin/pacientes/:id/historial', (req, res) => {
     const { id } = req.params;
 
-    // Consulta 1: Obtener los test visuales
     const sqlTests = 'SELECT * FROM test_visual WHERE id_usuario = ? ORDER BY id_test DESC';
-    
-    // Consulta 2: Obtener los reportes
     const sqlReportes = 'SELECT * FROM reporte WHERE id_usuario = ? ORDER BY id_reporte DESC';
 
     db.query(sqlTests, [id], (err, tests) => {
@@ -434,7 +462,6 @@ app.get('/api/admin/pacientes/:id/historial', (req, res) => {
                 return res.status(500).json({ error: err2.message });
             }
 
-            // Respondemos con ambos paquetes de datos juntos
             res.json({
                 tests: tests,
                 reportes: reportes
@@ -510,4 +537,3 @@ app.listen(PORT, () => {
     console.log(`   GET  /api/perfil-medico/:idMedico/publicaciones`);
     console.log(`\n✨ Sistema listo!`);
 });
-app.listen(PORT, () => console.log(`🚀 Backend listo en http://localhost:${PORT}`));

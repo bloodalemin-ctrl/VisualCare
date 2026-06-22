@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable'; // Importación segura para la tabla del PDF
+import autoTable from 'jspdf-autotable'; 
 import CalibradorIA from './CalibradorIA'; 
 
 const colorFondoLateral = '#01579B'; 
@@ -50,7 +50,6 @@ function PanelPaciente({ usuario, cerrarSesion }) {
   const [distanciaReal, setDistanciaReal] = useState(0); 
   const [faseTestVisual, setFaseTestVisual] = useState(0); 
   
-  // Agregamos motilidad al estado
   const [resultadosTests, setResultadosTests] = useState({ 
     bicromatico: '', 
     agudeza: 0, 
@@ -76,9 +75,6 @@ function PanelPaciente({ usuario, cerrarSesion }) {
     { id: 'configuracion', icono: '⚙️', texto: 'Mi Perfil' }
   ];
 
-  // ========================================================
-  // CARGAS INICIALES
-  // ========================================================
   useEffect(() => {
     if (vistaActiva === 'inicio') {
       setCargandoNoticias(true);
@@ -96,9 +92,6 @@ function PanelPaciente({ usuario, cerrarSesion }) {
     }
   }, [vistaActiva, usuario]);
 
-  // ========================================================
-  // LÓGICA DE PRUEBAS VISUALES INTERACTIVAS
-  // ========================================================
   const iniciarPruebasVisuales = (distancia) => {
     setDistanciaReal(distancia); 
     if (distancia > 0) {
@@ -166,15 +159,14 @@ function PanelPaciente({ usuario, cerrarSesion }) {
 
   const procesarRespuestaAstigmatismo = (respuesta) => {
     setResultadosTests(prev => ({ ...prev, astigmatismo: respuesta }));
-    setFaseTestVisual(6); // Pasa a Motilidad
+    setFaseTestVisual(6); 
   };
 
   const procesarRespuestaMotilidad = async (respuesta) => {
     const resultadosFinales = { ...resultadosTests, motilidad: respuesta };
     setResultadosTests(resultadosFinales);
-    setFaseTestVisual(7); // Finalizamos las pruebas
+    setFaseTestVisual(7); 
     
-    // Almacenamos el resultado en la BD al finalizar la última prueba
     try {
       const textoReporte = `Bicromático: ${resultadosFinales.bicromatico}. Agudeza: Nivel ${resultadosFinales.agudeza}/5. Contraste: Nivel ${resultadosFinales.contraste}/5. Tensión Macular: ${resultadosFinales.amsler}. Fatiga de Enfoque: ${resultadosFinales.astigmatismo}. Motilidad Ocular: ${resultadosFinales.motilidad}. Distancia: ${distanciaReal}cm`;
       await fetch(`http://localhost:3000/api/historial/${usuario.id_usuario || usuario.id}`, {
@@ -185,9 +177,6 @@ function PanelPaciente({ usuario, cerrarSesion }) {
     } catch (e) {}
   };
 
-  // ========================================================
-  // LÓGICA CVS-Q (CÁLCULO EXACTO)
-  // ========================================================
   const manejarSeleccionCVSQ = (tipo, valor) => {
     const nuevas = [...respuestas];
     if (tipo === 'frecuencia') { 
@@ -230,9 +219,6 @@ function PanelPaciente({ usuario, cerrarSesion }) {
     }
   };
 
-  // ========================================================
-  // GENERADOR PDF (PROTEGIDO)
-  // ========================================================
   const generarPDF = () => {
     try {
       const doc = new jsPDF();
@@ -323,9 +309,6 @@ function PanelPaciente({ usuario, cerrarSesion }) {
     }
   };
 
-  // ========================================================
-  // MOTOR DE VISTAS (RENDER)
-  // ========================================================
   const renderContenido = () => {
     if (vistaActiva === 'inicio') {
       return (
@@ -345,11 +328,20 @@ function PanelPaciente({ usuario, cerrarSesion }) {
                     </span>
                   </div>
                   {noti.contenido && <p style={{ fontSize: '16px', whiteSpace: 'pre-wrap' }}>{noti.contenido}</p>}
+                  
+                  {/* Soporte para Imágenes, PDFs y VIDEOS */}
                   {(noti.url_multimedia || noti.url_archivo) && (
                     <div style={{ marginTop: '15px' }}>
-                      {noti.tipo_multimedia === 'pdf' ? <iframe src={noti.url_multimedia} style={{ width: '100%', height: '300px', border: 'none' }} /> : <img src={noti.url_multimedia || noti.url_archivo} style={{ maxWidth: '100%', borderRadius: '8px' }} />}
+                      {noti.tipo_multimedia === 'pdf' || noti.tipo_archivo === 'pdf' ? (
+                        <iframe src={noti.url_multimedia || noti.url_archivo} style={{ width: '100%', height: '300px', border: 'none' }} title="Documento PDF" />
+                      ) : noti.tipo_multimedia === 'video' || noti.tipo_archivo === 'video' ? (
+                        <video src={noti.url_multimedia || noti.url_archivo} controls style={{ maxWidth: '100%', borderRadius: '8px', outline: 'none' }} />
+                      ) : (
+                        <img src={noti.url_multimedia || noti.url_archivo} style={{ maxWidth: '100%', borderRadius: '8px' }} alt="Adjunto Médico" />
+                      )}
                     </div>
                   )}
+
                   <div style={{ marginTop: '15px' }}>
                     <span style={{ fontSize: '13px', background: '#F5F5F5', padding: '5px 10px', borderRadius: '4px' }}>
                       📅 {noti.fecha_publicacion ? new Date(noti.fecha_publicacion).toLocaleDateString('es-ES') : noti.fecha}
@@ -374,20 +366,26 @@ function PanelPaciente({ usuario, cerrarSesion }) {
                 <div style={{ border: '4px solid rgba(255,255,255,0.3)', padding: '30px', borderRadius: '8px' }}>E F P<br/>T O Z<br/>L P E D</div>
               </div>
               <div style={{ flex: 1.2, padding: '40px', textAlign: 'left', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#555', marginBottom: '30px' }}>
-                  
-
-Al continuar, aceptas que VisualCare es un sistema diseñado exclusivamente para la prevención y detección temprana de fatiga visual (CVS-Q). La información y resultados obtenidos son meramente orientativos y preventivos. No constituyen un diagnóstico clínico, tratamiento ni receta médica. Si experimentas molestias severas, te recomendamos consultar a tu especialista en salud visual.
-
-
-
-
+                
+                <p style={{ fontSize: '15px', lineHeight: '1.6', color: '#555', marginBottom: '20px' }}>
+                  Estas pruebas no sustituyen un diagnóstico profesional. Si indican posibles dificultades de visión, te recomendamos realizar un examen oftalmológico completo con un especialista. No se recoge ni almacena información personal relacionada con la salud.
                 </p>
+                
+                <div style={{ background: '#F8FAFC', padding: '15px', borderRadius: '8px', borderLeft: `4px solid ${colorBotonPrincipal}`, marginBottom: '25px', fontSize: '14px', color: '#475569', lineHeight: '1.5' }}>
+                  <strong>Aviso Importante:</strong> Al continuar, aceptas que VisualCare es un sistema diseñado exclusivamente para la prevención y detección temprana de fatiga visual (CVS-Q). La información y resultados obtenidos son meramente orientativos y preventivos. No constituyen un diagnóstico clínico, tratamiento ni receta médica. Si experimentas molestias severas, te recomendamos consultar a tu especialista en salud visual.
+                </div>
+
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '16px', fontWeight: 'bold', color: colorTitulos, cursor: 'pointer', marginBottom: '30px' }}>
                   <input type="checkbox" checked={avisoAceptado} onChange={(e) => setAvisoAceptado(e.target.checked)} style={{ transform: 'scale(1.5)', cursor: 'pointer' }} />
                   He leído y acepto el aviso legal
                 </label>
-                <button onClick={() => setPasoPrueba('calibracion')} disabled={!avisoAceptado} style={{ background: avisoAceptado ? colorBotonPrincipal : '#ccc', color: '#fff', padding: '15px 30px', fontSize: '18px', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: avisoAceptado ? 'pointer' : 'not-allowed' }}>Continuar a Calibración</button>
+                <button 
+                  onClick={() => { setPasoPrueba('calibracion'); }}
+                  disabled={!avisoAceptado}
+                  style={{ background: avisoAceptado ? colorBotonPrincipal : '#ccc', color: '#fff', padding: '15px 30px', fontSize: '18px', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: avisoAceptado ? 'pointer' : 'not-allowed', transition: 'all 0.3s', alignSelf: 'flex-start' }}
+                >
+                  Continuar a Calibración
+                </button>
               </div>
             </div>
           </div>
@@ -463,7 +461,7 @@ Al continuar, aceptas que VisualCare es un sistema diseñado exclusivamente para
               </div>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
                 <button onClick={() => procesarRespuestaAmsler('Líneas Rectas y Claras')} style={{ padding: '15px 25px', cursor: 'pointer', background: '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Veo líneas rectas</button>
-                <button onClick={() => procesarRespuestaAmsler('Líneas Distorsionadas/Borroso')} style={{ padding: '15px 25px', cursor: 'pointer', background: '#F44336', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Veo distorsión / Borroso</button>
+                <button onClick={() => procesarRespuestaAmsler('Líneas Distorsionadas/Borroso')} style={{ padding: '15px 25px', cursor: 'pointer', background: '#F44336', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Veo distorsión</button>
               </div>
             </div>
           )}
@@ -483,7 +481,6 @@ Al continuar, aceptas que VisualCare es un sistema diseñado exclusivamente para
             </div>
           )}
 
-          {/* 🔥 LA NUEVA PRUEBA 6: SEGUIMIENTO OCULAR (MOTILIDAD) */}
           {faseTestVisual === 6 && (
             <div style={{ background: '#fff', padding: '40px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
               <h2 style={{ color: colorTitulos, marginBottom: '10px' }}>6. Seguimiento Ocular (Motilidad)</h2>
