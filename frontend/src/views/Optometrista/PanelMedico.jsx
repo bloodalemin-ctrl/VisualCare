@@ -4,20 +4,16 @@ function PanelMedico({ usuario, cerrarSesion }) {
   const [vistaActiva, setVistaActiva] = useState('pacientes');
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
   
-  // Extraemos el ID del médico logueado garantizando fallback numérico para la Foreign Key
   const idMedico = usuario?.id_usuario || usuario?.id || 1;
   
-  // Pacientes e Historial Clínico
   const [listaPacientes, setListaPacientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [historialPaciente, setHistorialPaciente] = useState([]);
   
-  // Estado para el buzón de recomendaciones personales (TEST_VISUAL con tipo='Reporte Médico')
   const [notaClinica, setNotaClinica] = useState('');
   const [mensajeExitoHistorial, setMensajeExitoHistorial] = useState(false);
   
-  // Estados para el Muro de Consejos Generales (TABLA NOTICIA)
   const [tituloNoticia, setTituloNoticia] = useState('');
   const [textoNoticia, setTextoNoticia] = useState('');
   const [archivoNoticia, setArchivoNoticia] = useState(null);
@@ -25,12 +21,10 @@ function PanelMedico({ usuario, cerrarSesion }) {
   const [errorPublicacion, setErrorPublicacion] = useState('');
   const [publicacionesAnteriores, setPublicacionesAnteriores] = useState([]);
 
-  // Estados para el Perfil Médico
   const [publicacionesPerfil, setPublicacionesPerfil] = useState([]);
   const [nuevaNotaPerfil, setNuevaNotaPerfil] = useState('');
   const [mensajeExitoPerfil, setMensajeExitoPerfil] = useState(false);
   
-  // 1. Cargar Pacientes Asignados
   useEffect(() => {
     const cargarPacientes = async () => {
       if (!idMedico) return;
@@ -53,7 +47,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
     }
   }, [vistaActiva, idMedico]);
 
-  // 2. Cargar Historial Clínico Completo del Paciente Seleccionado
   useEffect(() => {
     if (pacienteSeleccionado) {
       const idPaciente = pacienteSeleccionado.id_usuario || pacienteSeleccionado.id;
@@ -69,7 +62,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
     }
   }, [pacienteSeleccionado]);
 
-  // 3. Cargar el Muro de Noticias Generales (Consejos)
   useEffect(() => {
     if (vistaActiva === 'muro') {
       fetch('http://localhost:3000/api/noticias')
@@ -81,7 +73,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
     }
   }, [vistaActiva]);
 
-  // 4. Cargar Trayectoria Profesional en Mi Perfil
   useEffect(() => {
     if (vistaActiva === 'perfil' && idMedico) {
       fetch(`http://localhost:3000/api/perfil-medico/${idMedico}/publicaciones`)
@@ -91,9 +82,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
     }
   }, [vistaActiva, idMedico]);
 
-  // =======================================================
-  // ACCIONES: RECOMENDACIÓN PERSONALIZADA (BUZÓN DEL PACIENTE)
-  // =======================================================
   const manejarSubidaHistorial = async (e) => {
     e.preventDefault();
     if (!notaClinica.trim()) return;
@@ -127,9 +115,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
     }
   };
 
-  // =======================================================
-  // ACCIONES: MURO DE CONSEJOS GENERALES (TABLA NOTICIA)
-  // =======================================================
   const manejarSubidaMuro = async (e) => {
     e.preventDefault();
     if (!textoNoticia.trim() && !tituloNoticia.trim() && !archivoNoticia) {
@@ -183,9 +168,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
     }
   };
 
-  // =======================================================
-  // ACCIONES: CURRÍCULUM / PERFIL MÉDICO
-  // =======================================================
   const agregarPublicacionPerfil = async (e) => {
     e.preventDefault();
     if (!nuevaNotaPerfil.trim()) return;
@@ -209,7 +191,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
     }
   };
 
-  // Estilos de la interfaz gráfica
   const colorFondoLateral = '#01579B'; 
   const colorTitulos = '#0277BD'; 
   const colorBotonPrincipal = '#0277BD';
@@ -221,7 +202,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
   ];
 
   const renderizarContenido = () => {
-    // Vista detallada del Expediente e Historial del Paciente seleccionado
     if (pacienteSeleccionado) {
       return (
         <div style={{ maxWidth: '1000px', margin: '0 auto', animation: 'fadeIn 0.3s' }}>
@@ -250,7 +230,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
             )}
           </div>
 
-          {/* Formulario del Buzón de Recomendación Directa al Paciente */}
           <form onSubmit={manejarSubidaHistorial} style={{ background: '#fff', padding: '30px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
             <h3 style={{ margin: '0 0 10px 0' }}>Añadir Recomendación (Buzón del Paciente)</h3>
             <textarea value={notaClinica} onChange={(e) => setNotaClinica(e.target.value)} rows="3" style={{ width: '100%', padding: '12px', marginTop: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box', resize: 'none', fontSize: '15px' }} placeholder="Escribe aquí las recomendaciones médicas específicas. El paciente leerá este mensaje desde su panel..."></textarea>
@@ -261,7 +240,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
       );
     }
 
-    // Grid General de Pacientes Registrados
     if (vistaActiva === 'pacientes') {
       return (
         <div style={{ animation: 'fadeIn 0.3s' }}>
@@ -284,7 +262,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
       );
     }
 
-    // Sección del Muro de Consejos Generales
     if (vistaActiva === 'muro') {
       return (
         <div style={{ maxWidth: '900px', margin: '0 auto', animation: 'fadeIn 0.3s' }}>
@@ -304,7 +281,20 @@ function PanelMedico({ usuario, cerrarSesion }) {
                       <button onClick={() => eliminarPublicacion(idPublicacion)} style={{ background: 'none', border: 'none', color: '#D32F2F', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}>🗑️ Eliminar</button>
                     </div>
                     <p style={{ color: '#333', fontSize: '15px', lineHeight: '1.5', whiteSpace: 'pre-wrap', margin: '0 0 15px 0' }}>{pub.contenido}</p>
-                    {(pub.url_multimedia || pub.url_archivo) && <img src={pub.url_multimedia || pub.url_archivo} alt="Adjunto" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', display: 'block', margin: '10px 0' }} />}
+                    
+                    {/* Renderizado de multimedia con soporte para VIDEO en el panel médico */}
+                    {(pub.url_multimedia || pub.url_archivo) && (
+                      <div style={{ marginTop: '15px' }}>
+                        {pub.tipo_multimedia === 'pdf' || pub.tipo_archivo === 'pdf' ? (
+                          <iframe src={pub.url_multimedia || pub.url_archivo} style={{ width: '100%', height: '300px', border: 'none' }} title="Documento PDF" />
+                        ) : pub.tipo_multimedia === 'video' || pub.tipo_archivo === 'video' ? (
+                          <video src={pub.url_multimedia || pub.url_archivo} controls style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', display: 'block', margin: '10px 0', outline: 'none' }} />
+                        ) : (
+                          <img src={pub.url_multimedia || pub.url_archivo} alt="Adjunto" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', display: 'block', margin: '10px 0' }} />
+                        )}
+                      </div>
+                    )}
+                    
                     <small style={{ color: '#999' }}>📅 Publicado: {new Date(pub.fecha_publicacion || pub.fecha).toLocaleDateString('es-ES')}</small>
                   </div>
                 );
@@ -331,7 +321,6 @@ function PanelMedico({ usuario, cerrarSesion }) {
       );
     }
 
-    // Configuración Curricular del Perfil Profesional
     if (vistaActiva === 'perfil') {
       return (
         <div style={{ maxWidth: '800px', margin: '0 auto', animation: 'fadeIn 0.3s' }}>
